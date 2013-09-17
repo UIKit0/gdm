@@ -104,6 +104,8 @@ static void     gdm_display_class_init  (GdmDisplayClass *klass);
 static void     gdm_display_init        (GdmDisplay      *display);
 static void     gdm_display_finalize    (GObject         *object);
 static void     queue_finish            (GdmDisplay      *display);
+static void     _gdm_display_set_status (GdmDisplay *display,
+                                         int         status);
 
 G_DEFINE_ABSTRACT_TYPE (GdmDisplay, gdm_display, G_TYPE_OBJECT)
 
@@ -297,6 +299,13 @@ on_name_vanished (GDBusConnection *connection,
 }
 
 static void
+on_slave_started (GdmDBusSlave *slave_proxy,
+                  GdmDisplay   *display)
+{
+        _gdm_display_set_status (display, GDM_DISPLAY_MANAGED);
+}
+
+static void
 gdm_display_real_set_slave_bus_name_finish (GObject      *source_object,
                                             GAsyncResult *res,
                                             gpointer      user_data)
@@ -309,6 +318,10 @@ gdm_display_real_set_slave_bus_name_finish (GObject      *source_object,
                                 G_OBJECT (display),
                                 "session-id",
                                 G_BINDING_DEFAULT);
+        g_signal_connect (G_OBJECT (display->priv->slave_proxy),
+                          "started",
+                          G_CALLBACK (on_slave_started),
+                          display);
 }
 
 static gboolean
@@ -339,6 +352,12 @@ gdm_display_real_set_slave_bus_name (GdmDisplay *display,
                                   NULL,
                                   gdm_display_real_set_slave_bus_name_finish,
                                   display);
+
+        display->priv->slave_proxy = GDM_DBUS_SLAVE (gdm_dbus_slave_proxy_new_sync (display->priv->connection,
+                                                                                    G_DBUS_PROXY_FLAGS_NONE,
+                                                                                    name,
+                                                                                    GDM_SLAVE_PATH,
+                                                                                    NULL, NULL));
 
         return TRUE;
 }
@@ -1347,74 +1366,6 @@ register_display (GdmDisplay *display)
         return TRUE;
 }
 
-char *
-gdm_display_open_session_sync (GdmDisplay    *display,
-                               GPid           pid_of_caller,
-                               uid_t          uid_of_caller,
-                               GCancellable  *cancellable,
-                               GError       **error)
-{
-        char *address;
-        int ret;
-
-        if (display->priv->slave_proxy == NULL) {
-                g_set_error (error,
-                             G_DBUS_ERROR,
-                             G_DBUS_ERROR_ACCESS_DENIED,
-                             _("No session available yet"));
-                return NULL;
-        }
-
-        address = NULL;
-        ret = gdm_dbus_slave_call_open_session_sync (display->priv->slave_proxy,
-                                                     (int) pid_of_caller,
-                                                     (int) uid_of_caller,
-                                                     &address,
-                                                     cancellable,
-                                                     error);
-
-        if (!ret) {
-                return NULL;
-        }
-
-        return address;
-}
-
-char *
-gdm_display_open_reauthentication_channel_sync (GdmDisplay    *display,
-                                                const char    *username,
-                                                GPid           pid_of_caller,
-                                                uid_t          uid_of_caller,
-                                                GCancellable  *cancellable,
-                                                GError       **error)
-{
-        char *address;
-        int ret;
-
-        if (display->priv->slave_proxy == NULL) {
-                g_set_error (error,
-                             G_DBUS_ERROR,
-                             G_DBUS_ERROR_ACCESS_DENIED,
-                             _("No session available yet"));
-                return NULL;
-        }
-
-        address = NULL;
-        ret = gdm_dbus_slave_call_open_reauthentication_channel_sync (display->priv->slave_proxy,
-                                                                      username,
-                                                                      pid_of_caller,
-                                                                      uid_of_caller,
-                                                                      &address,
-                                                                      cancellable,
-                                                                      error);
-
-        if (!ret) {
-                return NULL;
-        }
-
-        return address;
-}
-
 /*
   dbus-send --system --print-reply --dest=org.gnome.DisplayManager /org/gnome/DisplayManager/Displays/1 org.freedesktop.DBus.Introspectable.Introspect
 */
@@ -1659,4 +1610,155 @@ GDBusObjectSkeleton *
 gdm_display_get_object_skeleton (GdmDisplay *display)
 {
         return display->priv->object_skeleton;
+}
+
+static void
+on_slave_set_up (GdmDBusSlave *slave,
+                 GAsyncResult *result,
+                 GTask        *task)
+{
+        GError *error = NULL;
+        char *username = NULL;
+
+        if (!gdm_dbus_slave_call_set_up_initial_session_finish (slave, &username, result, &error)) {
+                g_task_return_error (task, error);
+                return;
+        }
+
+        g_debug ("GdmDisplay: slave set up for %s user to connect",
+                 username);
+
+        g_task_return_pointer (task, username, NULL);
+}
+
+void
+gdm_display_set_up_initial_session (GdmDisplay           *display,
+                                    GCancellable         *cancellable,
+                                    GAsyncReadyCallback   callback,
+                                    gpointer              user_data)
+{
+        GTask *task;
+
+        task = g_task_new (display, cancellable, callback, user_data);
+
+        gdm_dbus_slave_call_set_up_initial_session (display->priv->slave_proxy,
+                                                    cancellable,
+                                                    (GAsyncReadyCallback)
+                                                    on_slave_set_up,
+                                                    task);
+}
+
+char *
+gdm_display_set_up_initial_session_finish (GdmDisplay    *display,
+                                           GAsyncResult  *result,
+                                           GError       **error)
+{
+        char *username;
+
+        username = g_task_propagate_pointer (G_TASK (result), error);
+        g_object_unref (G_OBJECT (result));
+
+        return username;
+}
+
+static void
+on_slave_started_initial_session (GdmDBusSlave *slave,
+                                  GAsyncResult *result,
+                                  GTask        *task)
+{
+        GError *error = NULL;
+
+        if (!gdm_dbus_slave_call_start_initial_session_finish (slave, result, &error)) {
+                g_task_return_error (task, error);
+                return;
+        }
+
+        g_debug ("GdmDisplay: slave started initial session");
+
+        g_task_return_boolean (task, TRUE);
+}
+
+void
+gdm_display_start_initial_session (GdmDisplay          *display,
+                                   GCancellable        *cancellable,
+                                   GAsyncReadyCallback  callback,
+                                   gpointer             user_data)
+{
+        GTask *task;
+
+        task = g_task_new (display, cancellable, callback, user_data);
+
+        gdm_dbus_slave_call_start_initial_session (display->priv->slave_proxy,
+                                                   cancellable,
+                                                   (GAsyncReadyCallback)
+                                                   on_slave_started_initial_session,
+                                                   task);
+}
+
+gboolean
+gdm_display_start_initial_session_finish (GdmDisplay    *display,
+                                          GAsyncResult  *result,
+                                          GError       **error)
+{
+        gboolean outcome;
+
+        outcome = g_task_propagate_boolean (G_TASK (result), error);
+        g_object_unref (G_OBJECT (result));
+
+        return outcome;
+}
+
+static void
+on_slave_initial_session_stopped (GdmDBusSlave *slave,
+                                  GAsyncResult *result,
+                                  GTask        *task)
+{
+        GError *error = NULL;
+
+        if (!gdm_dbus_slave_call_stop_initial_session_finish (slave, result, &error)) {
+                g_task_return_error (task, error);
+                return;
+        }
+
+        g_debug ("GdmDisplay: slave set up for user session to start");
+
+        g_task_return_boolean (task, TRUE);
+}
+
+void
+gdm_display_stop_initial_session (GdmDisplay          *display,
+                                  const char          *username,
+                                  GCancellable        *cancellable,
+                                  GAsyncReadyCallback  callback,
+                                  gpointer             user_data)
+{
+        GTask *task;
+
+        task = g_task_new (display, cancellable, callback, user_data);
+
+        gdm_dbus_slave_call_stop_initial_session (display->priv->slave_proxy,
+                                                  username,
+                                                  cancellable,
+                                                  (GAsyncReadyCallback)
+                                                  on_slave_initial_session_stopped,
+                                                  task);
+}
+
+gboolean
+gdm_display_stop_initial_session_finish (GdmDisplay    *display,
+                                         GAsyncResult  *result,
+                                         GError       **error)
+{
+        gboolean outcome;
+
+        outcome = g_task_propagate_boolean (G_TASK (result), error);
+        g_object_unref (G_OBJECT (result));
+
+        return outcome;
+}
+
+gboolean
+gdm_display_run_pre_session_script (GdmDisplay *display)
+{
+        return FALSE;
 }

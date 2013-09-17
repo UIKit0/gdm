@@ -157,6 +157,33 @@ gboolean            gdm_display_set_slave_bus_name             (GdmDisplay *disp
                                                                 const char *name,
                                                                 GError    **error);
 
+void                gdm_display_set_up_initial_session           (GdmDisplay *display,
+                                                                  GCancellable *cancellable,
+                                                                  GAsyncReadyCallback callback,
+                                                                  gpointer user_data);
+
+char *              gdm_display_set_up_initial_session_finish    (GdmDisplay *display,
+                                                                  GAsyncResult *result,
+                                                                  GError **error);
+void                gdm_display_start_initial_session           (GdmDisplay *display,
+                                                                 GCancellable *cancellable,
+                                                                 GAsyncReadyCallback callback,
+                                                                 gpointer user_data);
+
+gboolean            gdm_display_start_initial_session_finish    (GdmDisplay *display,
+                                                                 GAsyncResult *result,
+                                                                 GError **error);
+void                gdm_display_stop_initial_session           (GdmDisplay   *display,
+                                                                const char   *username,
+                                                                GCancellable *cancellable,
+                                                                GAsyncReadyCallback callback,
+                                                                gpointer user_data);
+
+gboolean           gdm_display_stop_initial_session_finish     (GdmDisplay *display,
+                                                                GAsyncResult *result,
+                                                                GError **error);
+gboolean           gdm_display_run_pre_session_script          (GdmDisplay *display);
+
 G_END_DECLS
 
 #endif /* __GDM_DISPLAY_H */
