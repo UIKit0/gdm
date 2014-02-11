@@ -2655,6 +2655,12 @@ gdm_session_get_session_id (GdmSession *self)
         return g_strdup (conversation->session_id);
 }
 
+static char *
+get_session_filename (GdmSession *self)
+{
+        return g_strdup_printf ("%s.desktop", get_session_name (self));
+}
+
 gboolean
 gdm_session_bypasses_xsession (GdmSession *self)
 {
@@ -2667,7 +2673,7 @@ gdm_session_bypasses_xsession (GdmSession *self)
         g_return_val_if_fail (self != NULL, FALSE);
         g_return_val_if_fail (GDM_IS_SESSION (self), FALSE);
 
-        filename = g_strdup_printf ("%s.desktop", get_session_name (self));
+        filename = get_session_filename (self);
 
         key_file = load_key_file_for_file (filename);
 
@@ -2695,7 +2701,36 @@ out:
 gboolean
 gdm_session_has_own_display_server (GdmSession *self)
 {
-        return FALSE;
+        GError     *error;
+        GKeyFile   *key_file;
+        gboolean    res;
+        gboolean    has_own_display_server = FALSE;
+        char       *filename;
+
+        g_return_val_if_fail (self != NULL, FALSE);
+        g_return_val_if_fail (GDM_IS_SESSION (self), FALSE);
+
+        filename = get_session_filename (self);
+
+        key_file = load_key_file_for_file (filename);
+
+        error = NULL;
+        /* FIXME: XXX: using X-GDM-NeedsVT for now as it's what's in the current sessions. */
+        res = g_key_file_has_key (key_file, G_KEY_FILE_DESKTOP_GROUP, "X-GDM-NeedsVT", NULL);
+        if (!res) {
+                goto out;
+        } else {
+                has_own_display_server = g_key_file_get_boolean (key_file, G_KEY_FILE_DESKTOP_GROUP, "X-GDM-NeedsVT", &error);
+                if (error) {
+                        has_own_display_server = FALSE;
+                        g_error_free (error);
+                        goto out;
+                }
+        }
+
+out:
+        g_free (filename);
+        return has_own_display_server;
 }
 
 void
