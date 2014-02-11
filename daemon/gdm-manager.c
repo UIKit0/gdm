@@ -863,6 +863,22 @@ on_start_user_session (StartUserSessionOperation *operation)
                    user switching. */
                 gdm_session_reset (operation->session);
                 destroy_start_user_session_operation (operation);
+        } else if (gdm_session_has_own_display_server (operation->session)) {
+                GdmDisplay *display;
+                uid_t allowed_uid;
+
+                g_debug ("GdmManager: session has its display server, reusing our server for another login screen");
+
+                allowed_uid = gdm_session_get_allowed_user (operation->session);
+
+                display = get_display_for_session (operation->manager, operation->session);
+                g_object_set_data (G_OBJECT (display), "gdm-session", NULL);
+                g_object_set_data (G_OBJECT (operation->session), "gdm-display", NULL);
+
+                gdm_display_reset_initial_session (display);
+                create_session_for_display (operation->manager, display, allowed_uid);
+
+                start_user_session (operation->manager, NULL, operation);
         } else {
                 GdmDisplay *display;
                 const char *username;
