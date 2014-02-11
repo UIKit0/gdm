@@ -155,6 +155,7 @@ gboolean            gdm_display_remove_user_authorization      (GdmDisplay *disp
 void                gdm_display_set_up_initial_session         (GdmDisplay  *display,
                                                                 char       **username);
 void                gdm_display_start_initial_session          (GdmDisplay  *display);
+void                gdm_display_reset_initial_session          (GdmDisplay  *display);
 void                gdm_display_stop_initial_session           (GdmDisplay  *display,
                                                                 const char  *username);
 gboolean            gdm_display_run_pre_session_script         (GdmDisplay  *display);

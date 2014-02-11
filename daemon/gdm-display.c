@@ -1446,6 +1446,12 @@ gdm_display_start_initial_session (GdmDisplay *display)
 }
 
 void
+gdm_display_reset_initial_session (GdmDisplay *display)
+{
+        gdm_slave_reset_initial_session (display->priv->slave);
+}
+
+void
 gdm_display_stop_initial_session (GdmDisplay *display,
                                   const char *username)
 {

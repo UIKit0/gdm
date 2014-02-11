@@ -952,6 +952,12 @@ gdm_slave_start_initial_session (GdmSlave *slave)
 }
 
 void
+gdm_slave_reset_initial_session (GdmSlave *slave)
+{
+        GDM_SLAVE_GET_CLASS (slave)->reset_initial_session (slave);
+}
+
+void
 gdm_slave_stop_initial_session (GdmSlave   *slave,
                                 const char *username)
 {
