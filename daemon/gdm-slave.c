@@ -952,6 +952,12 @@ gdm_slave_start_greeter_session (GdmSlave *slave)
 }
 
 void
+gdm_slave_reset_greeter_session (GdmSlave *slave)
+{
+        GDM_SLAVE_GET_CLASS (slave)->reset_greeter_session (slave);
+}
+
+void
 gdm_slave_stop_greeter_session (GdmSlave   *slave,
                                 const char *username)
 {

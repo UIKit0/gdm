@@ -359,6 +359,19 @@ on_greeter_environment_session_opened (GdmLaunchEnvironment *greeter_environment
 }
 
 static void
+on_greeter_environment_session_reset (GdmLaunchEnvironment *greeter_environment,
+                                      GdmSimpleSlave       *slave)
+{
+        char       *session_id;
+
+        g_debug ("GdmSimpleSlave: Greeter reset");
+        session_id = gdm_launch_environment_get_session_id (GDM_LAUNCH_ENVIRONMENT (greeter_environment));
+
+        g_object_set (GDM_SLAVE (slave), "session-id", session_id, NULL);
+        g_free (session_id);
+}
+
+static void
 on_greeter_environment_session_started (GdmLaunchEnvironment *greeter_environment,
                                         GdmSimpleSlave       *slave)
 {
@@ -606,6 +619,10 @@ start_launch_environment (GdmSimpleSlave *slave,
                           G_CALLBACK (on_greeter_environment_session_opened),
                           slave);
         g_signal_connect (slave->priv->greeter_environment,
+                          "reset",
+                          G_CALLBACK (on_greeter_environment_session_reset),
+                          slave);
+        g_signal_connect (slave->priv->greeter_environment,
                           "started",
                           G_CALLBACK (on_greeter_environment_session_started),
                           slave);
@@ -747,6 +764,16 @@ gdm_simple_slave_start_greeter_session (GdmSlave *slave)
                 gdm_slave_run_script (slave, GDMCONFDIR "/Init", GDM_USERNAME);
         } else {
                 start_greeter (GDM_SIMPLE_SLAVE (slave));
+        }
+}
+
+static void
+gdm_simple_slave_reset_greeter_session (GdmSlave *slave)
+{
+        GdmSimpleSlave *self = GDM_SIMPLE_SLAVE (slave);
+
+        if (self->priv->greeter_environment != NULL) {
+                gdm_launch_environment_reset (GDM_LAUNCH_ENVIRONMENT (self->priv->greeter_environment));
         }
 }
 
@@ -1016,6 +1043,7 @@ gdm_simple_slave_class_init (GdmSimpleSlaveClass *klass)
         slave_class->stop = gdm_simple_slave_stop;
         slave_class->set_up_greeter_session = gdm_simple_slave_set_up_greeter_session;
         slave_class->start_greeter_session = gdm_simple_slave_start_greeter_session;
+        slave_class->reset_greeter_session = gdm_simple_slave_reset_greeter_session;
         slave_class->stop_greeter_session = gdm_simple_slave_stop_greeter_session;
 
         g_type_class_add_private (klass, sizeof (GdmSimpleSlavePrivate));

@@ -155,6 +155,7 @@ gboolean            gdm_display_remove_user_authorization      (GdmDisplay *disp
 void                gdm_display_set_up_greeter_session         (GdmDisplay  *display,
                                                                 char       **username);
 void                gdm_display_start_greeter_session          (GdmDisplay  *display);
+void                gdm_display_reset_greeter_session          (GdmDisplay  *display);
 void                gdm_display_stop_greeter_session           (GdmDisplay  *display,
                                                                 const char  *username);
 GdmSlave *          gdm_display_get_slave                      (GdmDisplay  *display);
