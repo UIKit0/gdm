@@ -2727,6 +2727,10 @@ out:
 gboolean
 gdm_session_has_own_display_server (GdmSession *self)
 {
+        if (gdm_session_is_wayland_session (self)) {
+                return TRUE;
+        }
+
         return FALSE;
 }
 
