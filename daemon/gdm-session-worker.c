@@ -28,6 +28,8 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/ioctl.h>
+#include <sys/vt.h>
 #include <errno.h>
 #include <grp.h>
 #include <pwd.h>
@@ -159,6 +161,7 @@ struct GdmSessionWorkerPrivate
         guint32           is_program_session : 1;
         guint32           is_reauth_session : 1;
         guint32           display_is_local : 1;
+        guint32           session_has_own_display_server : 1;
         guint             state_change_idle_id;
 
         char                 *server_address;
@@ -1914,6 +1917,48 @@ gdm_session_worker_start_session (GdmSessionWorker  *worker,
 }
 
 static gboolean
+set_up_for_new_vt (GdmSessionWorker *worker)
+{
+        int fd;
+        char vt_string[256];
+        struct vt_stat vt_state = { 0 };
+        int session_vt = 0;
+
+        fd = open ("/dev/tty0", O_RDWR | O_NOCTTY);
+
+        if (fd < 0) {
+                g_debug ("GdmSessionWorker: couldn't open VT master: %m");
+                return FALSE;
+        }
+
+        if (ioctl (fd, VT_GETSTATE, &vt_state) < 0) {
+                g_debug ("GdmSessionWorker: couldn't get current VT: %m");
+                goto fail;
+        }
+
+        if (ioctl(fd, VT_OPENQRY, &session_vt) < 0) {
+                g_debug ("GdmSessionWorker: couldn't open new VT: %m");
+                goto fail;
+        }
+
+        close (fd);
+        fd = -1;
+
+        g_assert (session_vt > 0);
+
+        g_snprintf(vt_string, sizeof (vt_string), "%d", session_vt);
+        gdm_session_worker_set_environment_variable (worker,
+                                                     "XDG_VTNR",
+                                                     vt_string);
+
+        return TRUE;
+
+fail:
+        close (fd);
+        return FALSE;
+}
+
+static gboolean
 set_up_for_current_vt (GdmSessionWorker  *worker,
                        GError           **error)
 {
@@ -1991,7 +2036,11 @@ gdm_session_worker_open_session (GdmSessionWorker  *worker,
         g_assert (worker->priv->state == GDM_SESSION_WORKER_STATE_ACCOUNT_DETAILS_SAVED);
         g_assert (geteuid () == 0);
 
-        set_up_for_current_vt (worker, NULL);
+        if (worker->priv->session_has_own_display_server) {
+                set_up_for_new_vt (worker);
+        } else {
+                set_up_for_current_vt (worker, NULL);
+        }
 
         flags = 0;
 
@@ -2138,6 +2187,19 @@ gdm_session_worker_handle_set_session_type (GdmDBusWorker         *object,
         g_free (worker->priv->session_type);
         worker->priv->session_type = g_strdup (session_type);
         gdm_dbus_worker_complete_set_session_type (object, invocation);
+        return TRUE;
+}
+
+static gboolean
+gdm_session_worker_handle_set_session_has_own_display_server (GdmDBusWorker         *object,
+                                                              GDBusMethodInvocation *invocation,
+                                                              gboolean               has_own_display_server)
+{
+        GdmSessionWorker *worker = GDM_SESSION_WORKER (object);
+
+        g_debug ("GdmSessionWorker: session has own display server: %s", has_own_display_server ? "yes" : "no");
+        worker->priv->session_has_own_display_server = has_own_display_server;
+        gdm_dbus_worker_complete_set_session_has_own_display_server (object, invocation);
         return TRUE;
 }
 
@@ -2923,6 +2985,7 @@ worker_interface_init (GdmDBusWorkerIface *interface)
         interface->handle_set_language_name = gdm_session_worker_handle_set_language_name;
         interface->handle_set_session_name = gdm_session_worker_handle_set_session_name;
         interface->handle_set_session_type = gdm_session_worker_handle_set_session_type;
+        interface->handle_set_session_has_own_display_server = gdm_session_worker_handle_set_session_has_own_display_server;
         interface->handle_set_environment_variable = gdm_session_worker_handle_set_environment_variable;
         interface->handle_start_program = gdm_session_worker_handle_start_program;
         interface->handle_start_reauthentication = gdm_session_worker_handle_start_reauthentication;

@@ -2673,6 +2673,10 @@ gdm_session_bypasses_xsession (GdmSession *self)
         g_return_val_if_fail (self != NULL, FALSE);
         g_return_val_if_fail (GDM_IS_SESSION (self), FALSE);
 
+        if (gdm_session_has_own_display_server (self)) {
+                return TRUE;
+        }
+
         filename = get_session_filename (self);
 
         key_file = load_key_file_for_file (filename);
@@ -2768,6 +2772,7 @@ gdm_session_select_session (GdmSession *self,
 {
         GHashTableIter iter;
         gpointer key, value;
+        gboolean has_own_display_server;
 
         g_free (self->priv->selected_session);
 
@@ -2776,6 +2781,8 @@ gdm_session_select_session (GdmSession *self,
         } else {
                 self->priv->selected_session = g_strdup (text);
         }
+
+        has_own_display_server = gdm_session_has_own_display_server (self);
 
         g_hash_table_iter_init (&iter, self->priv->conversations);
         while (g_hash_table_iter_next (&iter, &key, &value)) {
@@ -2786,6 +2793,9 @@ gdm_session_select_session (GdmSession *self,
                 gdm_dbus_worker_call_set_session_name (conversation->worker_proxy,
                                                        get_session_name (self),
                                                        NULL, NULL, NULL);
+                gdm_dbus_worker_call_set_session_has_own_display_server (conversation->worker_proxy,
+                                                                         has_own_display_server,
+                                                                         NULL, NULL, NULL);
         }
 }
 
