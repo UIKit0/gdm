@@ -57,9 +57,6 @@
 
 #define GDM_SIMPLE_SLAVE_GET_PRIVATE(o) (G_TYPE_INSTANCE_GET_PRIVATE ((o), GDM_TYPE_SIMPLE_SLAVE, GdmSimpleSlavePrivate))
 
-#define GDM_DBUS_NAME              "org.gnome.DisplayManager"
-#define GDM_DBUS_DISPLAY_INTERFACE "org.gnome.DisplayManager.Display"
-
 #define MAX_CONNECT_ATTEMPTS  10
 #define DEFAULT_PING_INTERVAL 15
 
@@ -1053,16 +1050,4 @@ gdm_simple_slave_finalize (GObject *object)
         }
 
         G_OBJECT_CLASS (gdm_simple_slave_parent_class)->finalize (object);
-}
-
-GdmSlave *
-gdm_simple_slave_new (const char *id)
-{
-        GObject *object;
-
-        object = g_object_new (GDM_TYPE_SIMPLE_SLAVE,
-                               "display-id", id,
-                               NULL);
-
-        return GDM_SLAVE (object);
 }

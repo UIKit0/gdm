@@ -89,8 +89,13 @@ void                gdm_slave_set_initial_cursor_position (GdmSlave *slave);
 gboolean            gdm_slave_run_script             (GdmSlave   *slave,
                                                       const char *dir,
                                                       const char *username);
-void                gdm_slave_export_interface       (GdmSlave               *slave,
-                                                      GDBusInterfaceSkeleton *interface);
+
+void                gdm_slave_set_up_initial_session (GdmSlave   *slave,
+                                                      char      **username);
+void                gdm_slave_start_initial_session  (GdmSlave   *slave);
+void                gdm_slave_stop_initial_session   (GdmSlave   *slave,
+                                                      const char *username);
+
 G_END_DECLS
 
 #endif /* __GDM_SLAVE_H */

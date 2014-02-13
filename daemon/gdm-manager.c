@@ -102,9 +102,6 @@ static guint signals [LAST_SIGNAL] = { 0, };
 static void     gdm_manager_class_init  (GdmManagerClass *klass);
 static void     gdm_manager_init        (GdmManager      *manager);
 static void     gdm_manager_finalize    (GObject         *object);
-static void     on_initial_session_set_up (GdmDisplay   *display,
-                                           GAsyncResult *result,
-                                           GdmManager   *manager);
 static void create_session_for_display (GdmManager *manager,
                                         GdmDisplay *display,
                                         uid_t       allowed_user);
@@ -727,6 +724,28 @@ manager_interface_init (GdmDBusManagerIface *interface)
 }
 
 static void
+set_up_initial_session (GdmManager *manager,
+                        GdmDisplay *display)
+{
+        char *allowed_user;
+        struct passwd *passwd_entry;
+
+        gdm_display_set_up_initial_session (display, &allowed_user);
+
+        if (!gdm_get_pwent_for_name (allowed_user, &passwd_entry)) {
+                g_warning ("GdmManager: couldn't look up username %s",
+                           allowed_user);
+                gdm_display_finish (display);
+                return;
+        }
+
+        create_session_for_display (manager, display, passwd_entry->pw_uid);
+        g_free (allowed_user);
+
+        gdm_display_start_initial_session (display);
+}
+
+static void
 on_display_status_changed (GdmDisplay *display,
                            GParamSpec *arg1,
                            GdmManager *manager)
@@ -737,11 +756,7 @@ on_display_status_changed (GdmDisplay *display,
 
         switch (status) {
                 case GDM_DISPLAY_MANAGED:
-                        gdm_display_set_up_initial_session (display,
-                                                            NULL,
-                                                            (GAsyncReadyCallback)
-                                                            on_initial_session_set_up,
-                                                            manager);
+                        set_up_initial_session (manager, display);
                         break;
                 case GDM_DISPLAY_FAILED:
                 case GDM_DISPLAY_UNMANAGED:
@@ -826,28 +841,6 @@ start_user_session (GdmManager *manager,
         destroy_start_user_session_operation (operation);
 }
 
-static void
-on_initial_session_stopped (GdmDisplay   *display,
-                            GAsyncResult *result,
-                            StartUserSessionOperation *operation)
-{
-        GError *error = NULL;
-        gboolean stopped;
-
-        stopped = gdm_display_stop_initial_session_finish (display, result, &error);
-
-        if (!stopped) {
-                g_warning ("Couldn't stop initial session on display: %s",
-                           error->message);
-                g_error_free (error);
-                gdm_display_unmanage (display);
-                gdm_display_finish (display);
-                return;
-        }
-
-        start_user_session (operation->manager, display, operation);
-}
-
 static gboolean
 on_start_user_session (StartUserSessionOperation *operation)
 {
@@ -877,12 +870,9 @@ on_start_user_session (StartUserSessionOperation *operation)
                 display = get_display_for_session (operation->manager, operation->session);
                 username = gdm_session_get_username (operation->session);
 
-                gdm_display_stop_initial_session (display,
-                                                  username,
-                                                  NULL,
-                                                  (GAsyncReadyCallback)
-                                                  on_initial_session_stopped,
-                                                  operation);
+                gdm_display_stop_initial_session (display, username);
+
+                start_user_session (operation->manager, display, operation);
         }
 
         return G_SOURCE_REMOVE;
@@ -1408,20 +1398,6 @@ touch_marker_file (GdmManager *manager)
 }
 
 static void
-on_initial_session_started (GdmDisplay   *display,
-                            GAsyncResult *result,
-                            GdmManager   *manager)
-{
-        GError *error = NULL;
-        if (!gdm_display_start_initial_session_finish (display, result, &error)) {
-                g_warning ("GdmManager: couldn't start initial session: %s", error->message);
-                gdm_display_unmanage (display);
-                gdm_display_finish (display);
-                return;
-        }
-}
-
-static void
 create_session_for_display (GdmManager *manager,
                             GdmDisplay *display,
                             uid_t       allowed_user)
@@ -1512,43 +1488,6 @@ create_session_for_display (GdmManager *manager,
 
         start_autologin_conversation_if_necessary (manager, display, session);
         touch_marker_file (manager);
-}
-
-static void
-on_initial_session_set_up (GdmDisplay   *display,
-                           GAsyncResult *result,
-                           GdmManager   *manager)
-{
-        GError *error = NULL;
-        char *allowed_user;
-        struct passwd *passwd_entry;
-
-        allowed_user = gdm_display_set_up_initial_session_finish (display, result, &error);
-
-        if (allowed_user == NULL) {
-                g_warning ("Couldn't start initial session on display: %s",
-                           error->message);
-                g_error_free (error);
-                gdm_display_unmanage (display);
-                gdm_display_finish (display);
-                return;
-        }
-
-        if (!gdm_get_pwent_for_name (allowed_user, &passwd_entry)) {
-                g_warning ("GdmManager: couldn't look up username %s",
-                           allowed_user);
-                gdm_display_finish (display);
-                return;
-        }
-
-        create_session_for_display (manager, display, passwd_entry->pw_uid);
-        g_free (allowed_user);
-
-        gdm_display_start_initial_session (display,
-                                           NULL,
-                                           (GAsyncReadyCallback)
-                                           on_initial_session_started,
-                                           manager);
 }
 
 static void
