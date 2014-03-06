@@ -1247,9 +1247,6 @@ start_launch_environment (GdmSimpleSlave *slave,
                 alarm (slave->priv->ping_interval);
         }
 
-        /* Run the init script. gdmslave suspends until script has terminated */
-        run_script (slave, GDMCONFDIR "/Init", GDM_USERNAME);
-
         g_debug ("GdmSimpleSlave: Creating greeter on %s %s %s", display_name, display_device, display_hostname);
         slave->priv->greeter_environment = create_environment (session_id,
                                                                username,
@@ -1357,10 +1354,7 @@ setup_session (GdmSimpleSlave *slave)
 {
         if (wants_initial_setup (slave)) {
                 start_initial_setup (slave);
-        } else if (wants_autologin (slave)) {
-                /* Run the init script. gdmslave suspends until script has terminated */
-                run_script (slave, GDMCONFDIR "/Init", GDM_USERNAME);
-        } else {
+        } else if (!wants_autologin (slave)) {
                 start_greeter (slave);
         }
         create_new_session (slave);

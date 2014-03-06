@@ -848,6 +848,11 @@ gdm_server_start (GdmServer *server)
                 goto out;
         }
 
+        gdm_run_script (GDMCONFDIR "/Init", GDM_USERNAME,
+                        server->priv->display_name,
+                        NULL, /* hostname */
+                        server->priv->auth_file);
+
         res = TRUE;
  out:
         if (local_error) {
